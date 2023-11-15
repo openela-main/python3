@@ -1,0 +1,269 @@
+From 0cfd9a7f26488567b9a3e5ec192099a8b80ad9df Mon Sep 17 00:00:00 2001
+From: Lumir Balhar <lbalhar@redhat.com>
+Date: Tue, 19 Jan 2021 07:55:37 +0100
+Subject: [PATCH] [PATCH] bpo-37064: Add -k and -a options to pathfix.py tool
+ (GH-16387)
+
+* bpo-37064: Add option -k to Tools/scripts/pathfix.py (GH-15548)
+
+Add flag -k to pathscript.py script: preserve shebang flags.
+
+(cherry picked from commit 50254ac4c179cb412e90682098c97db786143929)
+
+* bpo-37064: Add option -a to pathfix.py tool (GH-15717)
+
+Add option -a to Tools/Scripts/pathfix.py script: add flags.
+
+(cherry picked from commit 1dc1acbd73f05f14c974b7ce1041787d7abef31e)
+---
+ Lib/test/test_tools/test_pathfix.py | 104 ++++++++++++++++++++++++++++
+ Tools/scripts/pathfix.py            |  64 +++++++++++++++--
+ 2 files changed, 163 insertions(+), 5 deletions(-)
+ create mode 100644 Lib/test/test_tools/test_pathfix.py
+
+diff --git a/Lib/test/test_tools/test_pathfix.py b/Lib/test/test_tools/test_pathfix.py
+new file mode 100644
+index 0000000..1f0585e
+--- /dev/null
++++ b/Lib/test/test_tools/test_pathfix.py
+@@ -0,0 +1,104 @@
++import os
++import subprocess
++import sys
++import unittest
++from test import support
++from test.test_tools import import_tool, scriptsdir
++
++
++class TestPathfixFunctional(unittest.TestCase):
++    script = os.path.join(scriptsdir, 'pathfix.py')
++
++    def setUp(self):
++        self.temp_file = support.TESTFN
++        self.addCleanup(support.unlink, support.TESTFN)
++
++    def pathfix(self, shebang, pathfix_flags, exitcode=0, stdout='', stderr=''):
++        with open(self.temp_file, 'w', encoding='utf8') as f:
++            f.write(f'{shebang}\n' + 'print("Hello world")\n')
++
++        proc = subprocess.run(
++            [sys.executable, self.script,
++             *pathfix_flags, '-n', self.temp_file],
++            universal_newlines=True, stdout=subprocess.PIPE,
++            stderr=subprocess.PIPE)
++
++        if stdout == '' and proc.returncode == 0:
++            stdout = f'{self.temp_file}: updating\n'
++        self.assertEqual(proc.returncode, exitcode, proc)
++        self.assertEqual(proc.stdout, stdout, proc)
++        self.assertEqual(proc.stderr, stderr, proc)
++
++        with open(self.temp_file, 'r', encoding='utf8') as f:
++            output = f.read()
++
++        lines = output.split('\n')
++        self.assertEqual(lines[1:], ['print("Hello world")', ''])
++        new_shebang = lines[0]
++
++        if proc.returncode != 0:
++            self.assertEqual(shebang, new_shebang)
++
++        return new_shebang
++
++    def test_pathfix(self):
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python',
++                ['-i', '/usr/bin/python3']),
++            '#! /usr/bin/python3')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python -R',
++                ['-i', '/usr/bin/python3']),
++            '#! /usr/bin/python3')
++
++    def test_pathfix_keeping_flags(self):
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python -R',
++                ['-i', '/usr/bin/python3', '-k']),
++            '#! /usr/bin/python3 -R')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python',
++                ['-i', '/usr/bin/python3', '-k']),
++            '#! /usr/bin/python3')
++
++    def test_pathfix_adding_flag(self):
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python',
++                ['-i', '/usr/bin/python3', '-a', 's']),
++            '#! /usr/bin/python3 -s')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python -S',
++                ['-i', '/usr/bin/python3', '-a', 's']),
++            '#! /usr/bin/python3 -s')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python -V',
++                ['-i', '/usr/bin/python3', '-a', 'v', '-k']),
++            '#! /usr/bin/python3 -vV')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python',
++                ['-i', '/usr/bin/python3', '-a', 'Rs']),
++            '#! /usr/bin/python3 -Rs')
++        self.assertEqual(
++            self.pathfix(
++                '#! /usr/bin/env python -W default',
++                ['-i', '/usr/bin/python3', '-a', 's', '-k']),
++            '#! /usr/bin/python3 -sW default')
++
++    def test_pathfix_adding_errors(self):
++        self.pathfix(
++            '#! /usr/bin/env python -E',
++            ['-i', '/usr/bin/python3', '-a', 'W default', '-k'],
++            exitcode=2,
++            stderr="-a option doesn't support whitespaces")
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/Tools/scripts/pathfix.py b/Tools/scripts/pathfix.py
+index c5bf984..2dfa6e8 100755
+--- a/Tools/scripts/pathfix.py
++++ b/Tools/scripts/pathfix.py
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env python3
+ 
+-# Change the #! line occurring in Python scripts.  The new interpreter
++# Change the #! line (shebang) occurring in Python scripts.  The new interpreter
+ # pathname must be given with a -i option.
+ #
+ # Command line arguments are files or directories to be processed.
+@@ -10,7 +10,13 @@
+ # arguments).
+ # The original file is kept as a back-up (with a "~" attached to its name),
+ # -n flag can be used to disable this.
+-#
++
++# Sometimes you may find shebangs with flags such as `#! /usr/bin/env python -si`.
++# Normally, pathfix overwrites the entire line, including the flags.
++# To change interpreter and keep flags from the original shebang line, use -k.
++# If you want to keep flags and add to them one single literal flag, use option -a.
++
++
+ # Undoubtedly you can do this using find and sed or perl, but this is
+ # a nice example of Python code that recurses down a directory tree
+ # and uses regular expressions.  Also note several subtleties like
+@@ -33,16 +39,21 @@ rep = sys.stdout.write
+ new_interpreter = None
+ preserve_timestamps = False
+ create_backup = True
++keep_flags = False
++add_flags = b''
+ 
+ 
+ def main():
+     global new_interpreter
+     global preserve_timestamps
+     global create_backup
+-    usage = ('usage: %s -i /interpreter -p -n file-or-directory ...\n' %
++    global keep_flags
++    global add_flags
++
++    usage = ('usage: %s -i /interpreter -p -n -k -a file-or-directory ...\n' %
+              sys.argv[0])
+     try:
+-        opts, args = getopt.getopt(sys.argv[1:], 'i:pn')
++        opts, args = getopt.getopt(sys.argv[1:], 'i:a:kpn')
+     except getopt.error as msg:
+         err(str(msg) + '\n')
+         err(usage)
+@@ -54,6 +65,13 @@ def main():
+             preserve_timestamps = True
+         if o == '-n':
+             create_backup = False
++        if o == '-k':
++            keep_flags = True
++        if o == '-a':
++            add_flags = a.encode()
++            if b' ' in add_flags:
++                err("-a option doesn't support whitespaces")
++                sys.exit(2)
+     if not new_interpreter or not new_interpreter.startswith(b'/') or \
+            not args:
+         err('-i option or file-or-directory missing\n')
+@@ -70,10 +88,14 @@ def main():
+             if fix(arg): bad = 1
+     sys.exit(bad)
+ 
++
+ ispythonprog = re.compile(r'^[a-zA-Z0-9_]+\.py$')
++
++
+ def ispython(name):
+     return bool(ispythonprog.match(name))
+ 
++
+ def recursedown(dirname):
+     dbg('recursedown(%r)\n' % (dirname,))
+     bad = 0
+@@ -96,6 +118,7 @@ def recursedown(dirname):
+         if recursedown(fullname): bad = 1
+     return bad
+ 
++
+ def fix(filename):
+ ##  dbg('fix(%r)\n' % (filename,))
+     try:
+@@ -166,12 +189,43 @@ def fix(filename):
+     # Return success
+     return 0
+ 
++
++def parse_shebang(shebangline):
++    shebangline = shebangline.rstrip(b'\n')
++    start = shebangline.find(b' -')
++    if start == -1:
++        return b''
++    return shebangline[start:]
++
++
++def populate_flags(shebangline):
++    old_flags = b''
++    if keep_flags:
++        old_flags = parse_shebang(shebangline)
++        if old_flags:
++            old_flags = old_flags[2:]
++    if not (old_flags or add_flags):
++        return b''
++    # On Linux, the entire string following the interpreter name
++    # is passed as a single argument to the interpreter.
++    # e.g. "#! /usr/bin/python3 -W Error -s" runs "/usr/bin/python3 "-W Error -s"
++    # so shebang should have single '-' where flags are given and
++    # flag might need argument for that reasons adding new flags is
++    # between '-' and original flags
++    # e.g. #! /usr/bin/python3 -sW Error
++    return b' -' + add_flags + old_flags
++
++
+ def fixline(line):
+     if not line.startswith(b'#!'):
+         return line
++
+     if b"python" not in line:
+         return line
+-    return b'#! ' + new_interpreter + b'\n'
++
++    flags = populate_flags(line)
++    return b'#! ' + new_interpreter + flags + b'\n'
++
+ 
+ if __name__ == '__main__':
+     main()
+-- 
+2.29.2
+
