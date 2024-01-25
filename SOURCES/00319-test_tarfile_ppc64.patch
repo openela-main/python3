@@ -1,0 +1,41 @@
+commit 86ed41792d394f804d2c9e695ac8b257220fbdee
+Author: Victor Stinner <vstinner@redhat.com>
+Date:   Tue Mar 12 17:17:13 2019 +0100
+
+    Fix test_tarfile on ppc64
+    
+    Fix sparse file tests of test_tarfile on ppc64le with the tmpfs
+    filesystem.
+    
+    * https://bugzilla.redhat.com/show_bug.cgi?id=1639490
+    * https://bugs.python.org/issue35772
+    * https://github.com/python/cpython/commit/d1dd6be613381b996b9071443ef081de8e5f3aff
+
+diff --git a/Lib/test/test_tarfile.py b/Lib/test/test_tarfile.py
+index 4cd7d53..bd8b05f 100644
+--- a/Lib/test/test_tarfile.py
++++ b/Lib/test/test_tarfile.py
+@@ -973,16 +973,21 @@ class GNUReadTest(LongnameTest, ReadTest, unittest.TestCase):
+     def _fs_supports_holes():
+         # Return True if the platform knows the st_blocks stat attribute and
+         # uses st_blocks units of 512 bytes, and if the filesystem is able to
+-        # store holes in files.
++        # store holes of 4 KiB in files.
++        #
++        # The function returns False if page size is larger than 4 KiB.
++        # For example, ppc64 uses pages of 64 KiB.
+         if sys.platform.startswith("linux"):
+             # Linux evidentially has 512 byte st_blocks units.
+             name = os.path.join(TEMPDIR, "sparse-test")
+             with open(name, "wb") as fobj:
++                # Seek to "punch a hole" of 4 KiB
+                 fobj.seek(4096)
++                fobj.write(b'x' * 4096)
+                 fobj.truncate()
+             s = os.stat(name)
+             support.unlink(name)
+-            return s.st_blocks == 0
++            return (s.st_blocks * 512 < s.st_size)
+         else:
+             return False
+ 
