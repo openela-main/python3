@@ -1,0 +1,43 @@
+bpo-44434: Don't call PyThread_exit_thread() explicitly (GH-26758)
+
+_thread.start_new_thread() no longer calls PyThread_exit_thread()
+explicitly at the thread exit, the call was redundant.
+
+On Linux with the glibc, pthread_cancel() loads dynamically the
+libgcc_s.so.1 library. dlopen() can fail if there is no more
+available file descriptor to open the file. In this case, the process
+aborts with the error message:
+
+"libgcc_s.so.1 must be installed for pthread_cancel to work"
+
+pthread_cancel() unwinds back to the thread's wrapping function that
+calls the thread entry point.
+
+The unwind function is dynamically loaded from the libgcc_s library
+since it is tightly coupled to the C compiler (GCC). The unwinder
+depends on DWARF, the compiler generates DWARF, so the unwinder
+belongs to the compiler.
+
+Thanks Florian Weimer and Carlos O'Donell for their help on
+investigating this issue.
+
+https://github.com/python/cpython/commit/45a78f906d2d5fe5381d78466b11763fc56d57ba
+
+Resolves: rhbz#1972293
+
+diff --git a/Modules/_threadmodule.c b/Modules/_threadmodule.c
+index a13b2e0..8cc035b 100644
+--- a/Modules/_threadmodule.c
++++ b/Modules/_threadmodule.c
+@@ -1027,7 +1027,10 @@ t_bootstrap(void *boot_raw)
+     nb_threads--;
+     PyThreadState_Clear(tstate);
+     PyThreadState_DeleteCurrent();
+-    PyThread_exit_thread();
++
++    // bpo-44434: Don't call explicitly PyThread_exit_thread(). On Linux with
++    // the glibc, pthread_exit() can abort the whole process if dlopen() fails
++    // to open the libgcc_s.so library (ex: EMFILE error).
+ }
+ 
+ static PyObject *
