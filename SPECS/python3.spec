@@ -14,7 +14,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.8
-Release: 56%{?dist}.3.openela.0
+Release: 59%{?dist}.openela.0
 License: Python
 
 
@@ -2123,22 +2123,22 @@ fi
 # ======================================================
 
 %changelog
-* Tue Mar 05 2024 Release Engineering <releng@openela.org> - %{pybasever}.8.openela.0
+* Wed May 22 2024 Release Engineering <releng@openela.org> - %{pybasever}.8.openela.0
 - Add openela to supported dists
 
-* Fri Jan 05 2024 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-56.3
+* Thu Jan 04 2024 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-59
 - Security fix for CVE-2023-27043
-Resolves: RHEL-5563
+Resolves: RHEL-20610
 
-* Tue Dec 12 2023 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-56.2
+* Tue Dec 12 2023 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-58
 - Security fix for CVE-2022-48564
-Resolves: RHEL-16673
+Resolves: RHEL-16674
 - Skip tests failing on s390x
-Resolves: RHEL-19251
+Resolves: RHEL-19252
 
-* Thu Nov 23 2023 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-56.1
+* Thu Nov 23 2023 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-57
 - Security fix for CVE-2022-48560
-Resolves: RHEL-16706
+Resolves: RHEL-16707
 
 * Thu Sep 07 2023 Charalampos Stratakis <cstratak@redhat.com> - 3.6.8-56
 - Security fix for CVE-2023-40217
