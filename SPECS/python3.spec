@@ -14,7 +14,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.8
-Release: 73%{?dist}.openela.0
+Release: 74%{?dist}.openela.0
 License: Python
 
 
@@ -918,6 +918,10 @@ Patch443: 00443-gh-124651-quote-template-strings-in-venv-activation-scripts.patc
 # Tests are adjusted because Python <3.9 don't support scoped IPv6 addresses.
 Patch444: 00444-security-fix-for-cve-2024-11168.patch
 
+# 00450 # 31aa7c11975e890489e31d8b293c3f92d3ea1180
+# CVE-2025-0938: Disallow square brackets ([ and ]) in domain names for parsed URLs
+Patch450: 00450-cve-2025-0938-disallow-square-brackets-and-in-domain-names-for-parsed-urls.patch
+
 # 00465 #
 # Security fixes for CVE-2025-4517, CVE-2025-4330, CVE-2025-4138, CVE-2024-12718, CVE-2025-4435 on tarfile
 #
@@ -1358,6 +1362,7 @@ GIT_DIR=$PWD git apply %{PATCH351}
 %patch437 -p1
 %patch443 -p1
 %patch444 -p1
+%patch450 -p1
 %patch465 -p1
 %patch467 -p1
 %patch471 -p1
@@ -2297,8 +2302,12 @@ fi
 # ======================================================
 
 %changelog
-* Thu Feb 05 2026 Release Engineering <releng@openela.org> - %{pybasever}.8.openela.0
+* Tue Mar 24 2026 Release Engineering <releng@openela.org> - %{pybasever}.8.openela.0
 - Add openela to supported dists
+
+* Fri Mar 06 2026 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-74
+- Security fix for CVE-2025-0938
+Resolves: RHEL-153235
 
 * Thu Jan 29 2026 Lumír Balhar <lbalhar@redhat.com> - 3.6.8-73
 - Security fixes for CVE-2026-0865, CVE-2025-15366, CVE-2025-15367, CVE-2026-1299
